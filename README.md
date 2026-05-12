@@ -65,6 +65,13 @@ cd SkullRender-Agents
 node bundle/cli.js setup claude-code
 ```
 
+## Troubleshooting (Windows / OneDrive)
+
+Sometimes `@modelcontextprotocol/sdk` lands without a `dist/` tree (imports fail referencing `server/index.js`).
+
+1. Delete `node_modules` and run `bun install` again from this folder.
+2. If it persists, copy `skullrender-mcp-skills/node_modules/@modelcontextprotocol/sdk` here and rerun the bundle command.
+
 ## OpenSpec
 
 Change `openspec/changes/skullrender-agents-mcp-mvp/` holds proposal, delta spec, design, tasks.
