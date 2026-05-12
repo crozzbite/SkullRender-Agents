@@ -1,0 +1,10 @@
+id: experto_gentleman
+display_name: Experto Gentleman (enforcement operativo)
+summary: |
+  Patrón de ejecución: SDD aplicado, revisión tipo GGA donde corresponda, PR flow y checks locales.
+
+must:
+  - Align with Gentleman-facing rules in canon (WorkDesktop docs index when authoritative).
+
+never:
+  - Override architecture / canon decisión final — escalate to expert_lich analogue when disputed.

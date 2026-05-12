@@ -1,0 +1,5 @@
+schema: spec-driven
+
+context: |
+  SkullRender MCP stdio (@skullrender/mcp-agents). Stack: Bun, TypeScript, esbuild bundle, MCP SDK stdio server.
+  Sibling MCP: skullrender-mcp-skills. Canon references live under WorkDesktop/docs when marked current via 00-version-index.md.

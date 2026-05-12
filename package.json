@@ -1,0 +1,30 @@
+{
+  "name": "@skullrender/mcp-agents",
+  "version": "0.1.0",
+  "private": false,
+  "description": "MCP server — SkullRender agent manifests and Presentador⇄Orquestador brief validation (sibling of skullrender-mcp-skills)",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "skullrender-agents": "bundle/cli.js"
+  },
+  "scripts": {
+    "build": "node ./node_modules/typescript/lib/tsc.js",
+    "bundle": "node ./node_modules/esbuild/lib/main.js ./src/cli.ts --bundle --platform=node --format=esm --outfile=bundle/cli.js --packages=external",
+    "start": "bun run bundle ; node bundle/cli.js mcp",
+    "test": "bun test src/",
+    "typecheck": "node ./node_modules/typescript/lib/tsc.js --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "yaml": "2.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "20.11.0",
+    "esbuild": "0.20.2",
+    "typescript": "5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
