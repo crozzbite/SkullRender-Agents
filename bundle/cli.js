@@ -57,7 +57,9 @@ var AgentsManager = class {
     const all = this.loadAll();
     if (all.size === 0)
       return "No manifests found.";
-    const lines = [...all.entries()].map(([, m]) => {
+    const ids = [...all.keys()].sort((a, b) => a.localeCompare(b));
+    const lines = ids.map((id) => {
+      const m = all.get(id);
       const dn = m.display_name ?? m.id;
       const sm = typeof m.summary === "string" ? m.summary.trim().split("\n")[0] ?? "" : "";
       return `- **${m.id}** \u2014 ${dn}
@@ -246,7 +248,7 @@ async function runMcpServer(repoRoot) {
       },
       {
         name: "skflow_agent_get",
-        description: "Get full YAML text of one agent manifest by id (presentador | orquestador | experto_gentleman | experto_lich).",
+        description: "Get full YAML text of one agent manifest by id. Use skflow_agents_list for available ids.",
         inputSchema: {
           type: "object",
           properties: { id: { type: "string", description: "Manifest id field" } },
@@ -255,7 +257,7 @@ async function runMcpServer(repoRoot) {
       },
       {
         name: "skflow_brief_validate",
-        description: "Validate a Presentador\u2192Orquestador brief (JSON object or YAML/JSON string) against schemas/brief.schema.json. Pure schema check, no LLM.",
+        description: "Validate a Presentador\u2192Orquestador brief (JSON object or YAML/JSON string). Deterministic check mirroring schemas/brief.schema.json (no LLM).",
         inputSchema: {
           type: "object",
           properties: {
@@ -299,10 +301,8 @@ async function runMcpServer(repoRoot) {
           };
         }
         const result = briefValidator.validatePayload(brief);
-        const text = JSON.stringify(result, null, 2);
         return {
-          content: [{ type: "text", text }],
-          ...result.valid ? {} : { isError: true }
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
         };
       }
       case "skflow_brief_schema": {
@@ -335,35 +335,6 @@ function resolveRepoRoot() {
     return path3.resolve(argv[0]);
   return path3.resolve(__dirname, "..");
 }
-async function injectCursorPartial(home = os.homedir()) {
-  const dir = path3.join(home, ".cursor");
-  await fs3.promises.mkdir(dir, { recursive: true });
-  const dest = path3.join(dir, "mcp.json");
-  let raw = "";
-  try {
-    raw = await fs3.promises.readFile(dest, "utf8");
-  } catch {
-  }
-  let parsed = {};
-  try {
-    if (raw.trim())
-      parsed = JSON.parse(raw);
-  } catch {
-    console.error(`[warn] ${dest} is not valid JSON \u2014 manual merge recommended.`);
-    return;
-  }
-  if (!parsed.mcpServers)
-    parsed.mcpServers = {};
-  const bundleDefault = path3.resolve(__dirname, "cli.js");
-  const exe = fs3.existsSync(bundleDefault) ? bundleDefault : path3.resolve(process.cwd(), "bundle/cli.js");
-  parsed.mcpServers["skullrender-agents"] = {
-    command: "node",
-    args: ["--experimental-vm-modules", exe, "mcp", resolveRepoRoot()],
-    env: { SKFLOW_ROOT: resolveRepoRoot() }
-  };
-  await fs3.promises.writeFile(dest, JSON.stringify(parsed, null, 2), "utf8");
-  console.log(`[+] Merged skullrender-agents into ${dest} (review before trusting).`);
-}
 async function injectClaudeCode(home = os.homedir()) {
   const configDir = path3.join(home, ".claude");
   await fs3.promises.mkdir(configDir, { recursive: true });
@@ -385,16 +356,16 @@ async function injectClaudeCode(home = os.homedir()) {
     env: { SKFLOW_ROOT: root }
   };
   await fs3.promises.writeFile(settingsPath, JSON.stringify(parsed, null, 2), "utf8");
-  console.log(`[+] Merged skullrender-agents MCP into ${settingsPath}`);
+  console.log(`Merged skullrender-agents MCP into ${settingsPath}`);
 }
 async function main() {
   const root = resolveRepoRoot();
   const printHelp = () => {
     console.log(`@skullrender/mcp-agents`);
-    console.log(`  node bundle/cli.js mcp [SKFLOW_ROOT]     stdio MCP (default root = repo parent of bundle)`);
-    console.log(`  node bundle/cli.js mcp --root <dir>`);
-    console.log(`  env SKFLOW_ROOT may override manifests/schemas location`);
-    console.log(`  node bundle/cli.js setup cursor|claude-code  inject MCP snippet (merge JSON)`);
+    console.log(`  node bundle/cli.js mcp [<SKFLOW_ROOT> | --root <dir>]   stdio MCP`);
+    console.log(`  env SKFLOW_ROOT overrides default root (manifests/schemas parent of bundle/cli.js)`);
+    console.log(`  node bundle/cli.js setup claude-code                     merge Claude Code MCP block`);
+    console.log(`  Cursor MCP: register manually alongside skullrender-skills (same pattern, different CLI path).`);
   };
   switch (command) {
     case "mcp":
@@ -402,14 +373,12 @@ async function main() {
       break;
     case "setup":
       switch (argv[0]) {
-        case "cursor":
-          await injectCursorPartial();
-          break;
         case "claude-code":
           await injectClaudeCode();
           break;
         default:
-          console.log(`setup targets: cursor, claude-code`);
+          console.log(`setup targets: claude-code`);
+          printHelp();
       }
       break;
     default:

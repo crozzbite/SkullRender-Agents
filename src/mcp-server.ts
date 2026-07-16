@@ -30,7 +30,7 @@ export async function runMcpServer(repoRoot: string): Promise<void> {
       {
         name: 'skflow_agent_get',
         description:
-          'Get full YAML text of one agent manifest by id (presentador | orquestador | experto_gentleman | experto_lich).',
+          'Get full YAML text of one agent manifest by id. Use skflow_agents_list for available ids.',
         inputSchema: {
           type: 'object',
           properties: { id: { type: 'string', description: 'Manifest id field' } },

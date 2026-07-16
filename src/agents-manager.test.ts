@@ -7,10 +7,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
 describe('AgentsManager', () => {
-  test('loads four manifests', () => {
+  test('loads five manifests', () => {
     const mgr = new AgentsManager(ROOT);
     const ids = [...mgr.loadAll().keys()].sort();
-    expect(ids.sort()).toEqual(['experto_gentleman', 'experto_lich', 'orquestador', 'presentador']);
+    expect(ids.sort()).toEqual([
+      'centinela_cerbero',
+      'experto_gentleman',
+      'experto_lich',
+      'orquestador',
+      'presentador',
+    ]);
   });
 
   test('yamlText presentador', () => {

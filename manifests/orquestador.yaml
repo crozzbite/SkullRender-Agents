@@ -14,3 +14,8 @@ never:
 delegates_execution_to:
   - experto_gentleman
   - experto_lich
+
+consults_on_triggers:
+  - agent: centinela_cerbero
+    triggers: [auth, secrets, deploy, merge, dependencies, llm_agents, pii, export]
+    note: Sentinel, not executor — attacks and vetoes (merge/deploy/export); never receives execution delegation.

@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build": "node ./node_modules/typescript/lib/tsc.js",
-    "bundle": "node ./node_modules/esbuild/lib/main.js ./src/cli.ts --bundle --platform=node --format=esm --outfile=bundle/cli.js --packages=external",
+    "bundle": "node ./node_modules/esbuild/bin/esbuild ./src/cli.ts --bundle --platform=node --format=esm --outfile=bundle/cli.js --packages=external",
     "start": "bun run bundle ; node bundle/cli.js mcp",
     "test": "bun test src/",
     "typecheck": "node ./node_modules/typescript/lib/tsc.js --noEmit"
