@@ -1,0 +1,7 @@
+# Project gga — SkullRender-Agents
+PROVIDER="opencode"
+FILE_PATTERNS="*.ts,*.tsx"
+EXCLUDE_PATTERNS="*.test.*,*.spec.*,*.d.ts,dist/*,build/*,bundle/*,node_modules/*"
+RULES_FILE="AGENTS.md"
+STRICT_MODE="true"
+TIMEOUT="300"
