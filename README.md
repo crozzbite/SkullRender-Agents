@@ -1,54 +1,56 @@
 # SkullRender-Agents (@skullrender/mcp-agents)
 
-MCP stdio server: **DECLARATIVE** agent manifests (Presentador / Orquestador / expertos) plus **deterministic validation** for the Presentador→Orquestador **brief**.
+MCP stdio server for **Legion** declarative offices (Presentador / Orquestador / Saep*) plus optional **personality packs**, identity resolve, and deterministic Presentador→Orquestador **brief** validation.
 
-Sibling of [`skullrender-mcp-skills`](../skullrender-mcp-skills) (`skills_*` vs `skflow_*` tools).
+- Repo: https://github.com/crozzbite/SkullRender-Agents  
+- Sibling skills MCP: [`skullrender-mcp-skills`](https://github.com/crozzbite/skullrender-mcp-skills) (`skills_*` vs `skflow_*`)  
+- Pack-free formula (generic offices): [`office-accelerator`](https://github.com/crozzbite/office-accelerator)
 
 ## Prerequisites
 
 - **Bun** (preferred) — `bun install`
-- Node 18+ to run bundled CLI
+- Node 18+ to run the bundled CLI
 
 ## Scripts
 
 ```bash
 bun install
 bun test src/
-node ./node_modules/esbuild/lib/main.js ./src/cli.ts --bundle --platform=node --format=esm --outfile=bundle/cli.js --packages=external
-bun run typecheck   # tsc (--noEmit, tests excluded from project)
+bun run bundle
+bun run typecheck
 ```
 
 ## Run MCP locally
 
-Default root is the repo directory (expects `manifests/` and `schemas/`).
+Default root is this repo (`manifests/`, `packs/`, `schemas/`).
 
 ```powershell
-cd C:\...\SkullRender-Agents
+cd path/to/SkullRender-Agents
 node bundle/cli.js mcp
 ```
 
-Optional:
+Optional alternate config root (e.g. accelerator `out/`):
 
 ```powershell
-$env:SKFLOW_ROOT="C:\path\to\alternate\configs"
-node bundle/cli.js mcp --root "C:\path\to\alternate\configs"
+$env:SKFLOW_ROOT="C:/path/to/out/demo"
+node bundle/cli.js mcp --root $env:SKFLOW_ROOT
 ```
 
-## Tools (prefijo `skflow_`)
+## Tools (`skflow_*`)
 
 | Tool | Purpose |
 |------|---------|
-| `skflow_agents_list` | Enumerate manifests |
-| `skflow_agent_get` | Raw YAML manifest by id |
-| `skflow_brief_validate` | Validate brief JSON/YAML (`valid` vs schema errors, no LLM) |
-| `skflow_brief_schema` | Return `schemas/brief.schema.json` string |
+| `skflow_agents_list` | Enumerate office manifests |
+| `skflow_agent_get` | Raw YAML by id |
+| `skflow_packs_list` | Personality packs (Lich / Gentleman / Cerbero) |
+| `skflow_pack_get` | Raw pack YAML by id |
+| `skflow_identity_resolve` | Office ± pack → prompt block (`inject_pack`) |
+| `skflow_brief_validate` | Validate brief JSON/YAML (no LLM) |
+| `skflow_brief_schema` | Return `schemas/brief.schema.json` |
 
-## Cursor / Claude MCP registration
+Legacy ids (`experto_*`, `centinela_cerbero`) remain for compatibility; prefer Saep* + packs.
 
-Install **both** MCP servers independently:
-
-1. Existing **skills**: follow `skullrender-mcp-skills` README (`skullrender-skills`).
-2. **Agents** (this repo): merge block:
+## Cursor MCP registration
 
 ```json
 "skullrender-agents": {
@@ -58,22 +60,31 @@ Install **both** MCP servers independently:
 }
 ```
 
-Claude Code helper (merges `.claude/settings.json`):
+Claude Code helper:
 
 ```powershell
-cd SkullRender-Agents
 node bundle/cli.js setup claude-code
 ```
 
 ## Troubleshooting (Windows / OneDrive)
 
-Sometimes `@modelcontextprotocol/sdk` lands without a `dist/` tree (imports fail referencing `server/index.js`).
+If `@modelcontextprotocol/sdk` lands without `dist/`:
 
-1. Delete `node_modules` and run `bun install` again from this folder.
-2. If it persists, copy `skullrender-mcp-skills/node_modules/@modelcontextprotocol/sdk` here and rerun the bundle command.
+1. Delete `node_modules` and `bun install` again from this folder.
+2. Or copy the SDK subtree from `skullrender-mcp-skills/node_modules/@modelcontextprotocol/sdk`.
 
-## OpenSpec
+## Layout
 
-Change `openspec/changes/skullrender-agents-mcp-mvp/` holds proposal, delta spec, design, tasks.
+| Path | Role |
+|------|------|
+| `manifests/` | Spine + Saep offices (+ legacy wrappers) |
+| `packs/` | Personality packs (optional inject) |
+| `schemas/` | brief / identity / personality-pack |
+| `handoffs/` | Session handoff notes |
+| `openspec/` | Change artifacts |
 
-Canon references: [WorkDesktop `docs/00-version-index.md`](../docs/00-version-index.md) (authoritative when marked current).
+## Hygiene
+
+- Ignore local caches (`.atl/`, `.claude/`, most `.cursor/`).
+- Do not commit secrets or machine-specific MCP absolute paths.
+- `gga` project config: `.gga` (excludes `bundle/` from review payload).
