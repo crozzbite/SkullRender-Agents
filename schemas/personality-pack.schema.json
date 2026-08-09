@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "skullrender://schemas/personality-pack/v1",
+  "title": "SkullRenderPersonalityPack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "kind", "must", "never"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "kind": { "const": "personality_pack" },
+    "display_name": { "type": "string" },
+    "voice": { "type": "string" },
+    "inject_default_into": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "inject_optional_into": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "must": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "never": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "source_legacy_manifest": { "type": "string" },
+    "note": { "type": "string" }
+  }
+}

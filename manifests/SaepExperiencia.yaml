@@ -1,0 +1,19 @@
+id: SaepExperiencia
+display_name: Saep Experiencia (UX)
+office: saep
+stage: ux
+reports_to: Orquestador
+handoff_owner: true
+personality_pack_default: false
+summary: |
+  Office UX: flujos, UI, aceptación usabilidad. Pack-free by default (no Gentleman).
+rasci_rows: ["4.9", "4.10", "4.11", "4.12"]
+permissions:
+  tools: [Read, Task, browser]
+  mcp: [engram, skullrender-skills, cursor-ide-browser]
+  skills: [ui-arch, angular, tailwind]
+  rules: [RULE_001]
+must:
+  - Keep UX acceptance criteria before handing off to SaepIngenieria.
+never:
+  - Inject PackGentleman into this office.

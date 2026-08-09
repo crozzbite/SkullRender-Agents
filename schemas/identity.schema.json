@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "skullrender://schemas/identity/v1",
+  "title": "SkullRenderLegionIdentity",
+  "description": "Office Saep/Sae/spine identity + optional personality pack injection. Canvas SoT: legion-rasci-sdlc v2.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "office", "reports_to"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "PascalCase descriptive id (e.g. SaepAlcance, SaeRequisitos)."
+    },
+    "display_name": { "type": "string" },
+    "office": {
+      "type": "string",
+      "enum": ["spine", "saep", "sae", "personality_pack"]
+    },
+    "stage": {
+      "type": "string",
+      "description": "SDLC stage key when office is saep/sae (scope|arqui|ux|ingenieria|qa|deploy|prod|mejora)."
+    },
+    "summary": { "type": "string" },
+    "reports_to": {
+      "type": "string",
+      "description": "Parent identity id (Saes → Saep; Saep → Orquestador; Orquestador → Presentador)."
+    },
+    "handoff_owner": {
+      "type": "boolean",
+      "default": false,
+      "description": "True only for Saep (stage) or spine actors that may emit handoff."
+    },
+    "rasci_rows": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Canvas RASCI row ids this identity participates in (e.g. 4.2, 4.13)."
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tools": { "type": "array", "items": { "type": "string" } },
+        "mcp": { "type": "array", "items": { "type": "string" } },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "rules": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "personality_pack": {
+      "type": "string",
+      "description": "Pack id to inject when this office runs with voice (e.g. PackLich). Omit for pack-free office runs."
+    },
+    "personality_pack_default": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, Orquestador injects personality_pack on kickoff of this office."
+    },
+    "must": { "type": "array", "items": { "type": "string" } },
+    "never": { "type": "array", "items": { "type": "string" } }
+  }
+}

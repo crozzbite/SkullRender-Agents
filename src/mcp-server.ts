@@ -8,23 +8,28 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { AgentsManager } from './agents-manager.js';
 import { BriefValidator } from './brief-validator.js';
+import { PacksManager } from './packs-manager.js';
+import { resolveIdentityPrompt } from './resolve-identity.js';
+import type { AgentManifest } from './types.js';
 
 /** MCP tools use skflow_ prefix vs skullrender-skills server's skills_* prefix. */
 
 export async function runMcpServer(repoRoot: string): Promise<void> {
   const agents = new AgentsManager(repoRoot);
+  const packs = new PacksManager(repoRoot);
   const briefValidator = new BriefValidator(repoRoot);
 
   const server = new Server(
-    { name: '@skullrender/mcp-agents', version: '0.1.0' },
-    { capabilities: { tools: {} } }
+    { name: '@skullrender/mcp-agents', version: '0.2.0' },
+    { capabilities: { tools: {} } },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
         name: 'skflow_agents_list',
-        description: 'List declarative agent manifests (Presentador / Orquestador / expertos pattern).',
+        description:
+          'List declarative agent manifests (spine / Saep / Sae / legacy expertos).',
         inputSchema: { type: 'object', properties: {}, required: [] },
       },
       {
@@ -34,6 +39,41 @@ export async function runMcpServer(repoRoot: string): Promise<void> {
         inputSchema: {
           type: 'object',
           properties: { id: { type: 'string', description: 'Manifest id field' } },
+          required: ['id'],
+        },
+      },
+      {
+        name: 'skflow_packs_list',
+        description:
+          'List Legion personality packs (PackLich, PackGentleman, PackCerbero). Injected on-demand into offices.',
+        inputSchema: { type: 'object', properties: {}, required: [] },
+      },
+      {
+        name: 'skflow_pack_get',
+        description: 'Get full YAML of one personality pack by id (e.g. PackLich).',
+        inputSchema: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id'],
+        },
+      },
+      {
+        name: 'skflow_identity_resolve',
+        description:
+          'Resolve office identity (+ optional personality pack) into a prompt block for Cursor subagents. Pack defaults from manifest.personality_pack or pack.inject_default_into.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Office / agent manifest id (e.g. SaepAlcance, SaepArquitectura)',
+            },
+            inject_pack: {
+              description:
+                'true = inject default pack; false = office only; string = pack id to force',
+              oneOf: [{ type: 'boolean' }, { type: 'string' }],
+            },
+          },
           required: ['id'],
         },
       },
@@ -55,7 +95,8 @@ export async function runMcpServer(repoRoot: string): Promise<void> {
       },
       {
         name: 'skflow_brief_schema',
-        description: 'Return the JSON Schema used to validate Presentador⇄Orquestador briefs (for prompting engineers).',
+        description:
+          'Return the JSON Schema used to validate Presentador⇄Orquestador briefs (for prompting engineers).',
         inputSchema: { type: 'object', properties: {}, required: [] },
       },
     ],
@@ -78,6 +119,78 @@ export async function runMcpServer(repoRoot: string): Promise<void> {
           };
         }
         return { content: [{ type: 'text', text }] };
+      }
+
+      case 'skflow_packs_list':
+        return { content: [{ type: 'text', text: packs.formatList() }] };
+
+      case 'skflow_pack_get': {
+        const id = String((rawArgs as { id?: string }).id ?? '');
+        const text = packs.yamlText(id);
+        if (!text) {
+          return {
+            content: [{ type: 'text', text: `Pack id="${id}" not found.` }],
+            isError: true,
+          };
+        }
+        return { content: [{ type: 'text', text }] };
+      }
+
+      case 'skflow_identity_resolve': {
+        const args = rawArgs as { id?: string; inject_pack?: boolean | string };
+        const id = String(args.id ?? '');
+        const office = agents.getAgent(id) as AgentManifest | undefined;
+        if (!office) {
+          return {
+            content: [{ type: 'text', text: `Manifest id="${id}" not found.` }],
+            isError: true,
+          };
+        }
+
+        let packId: string | undefined;
+        const inj = args.inject_pack;
+        if (inj === false) {
+          packId = undefined;
+        } else if (typeof inj === 'string' && inj.trim()) {
+          packId = inj.trim();
+        } else if (inj === true || inj === undefined) {
+          packId =
+            typeof office.personality_pack === 'string'
+              ? office.personality_pack
+              : undefined;
+          if (!packId) {
+            for (const p of packs.loadAll().values()) {
+              if (p.inject_default_into?.includes(id)) {
+                packId = p.id;
+                break;
+              }
+            }
+          }
+          // Default: inject only if personality_pack_default or explicit pack field
+          if (
+            inj === undefined &&
+            office.personality_pack_default === false &&
+            !office.personality_pack
+          ) {
+            packId = undefined;
+          }
+        }
+
+        const pack = packId ? packs.getPack(packId) : undefined;
+        if (packId && !pack) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Pack id="${packId}" not found for office "${id}".`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const prompt = resolveIdentityPrompt(office, pack ?? null);
+        return { content: [{ type: 'text', text: prompt }] };
       }
 
       case 'skflow_brief_validate': {
@@ -103,7 +216,10 @@ export async function runMcpServer(repoRoot: string): Promise<void> {
       }
 
       default:
-        return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `Unknown tool: ${name}` }],
+          isError: true,
+        };
     }
   });
 

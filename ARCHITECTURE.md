@@ -18,6 +18,24 @@ bundle/cli.js  → runMcpServer(SKFLOW_ROOT)
 
 Brief validation duplicates `schemas/brief.schema.json` in TypeScript (**single doc source** is the schema file); implementation must evolve in lock-step with schema edits.
 
+## Legion planning doc (canonical)
+
+Planeación viva de la Legion (topología SDLC, RASCI, kickoff paralelo, permisos, packs):
+
+- Cursor canvas: `~/.cursor/projects/c-Users-zzorc-OneDrive-Desktop-WorkDesktop-DnDApp/canvases/legion-rasci-sdlc.canvas.tsx`
+- Status: **v2.3** — office Saep/Sae + personality packs inyectables
+- 8 etapas: Scope → Arqui → UX → **Ingenieria** → QA → Deploy → Prod → Mejora
+- Packs: [`packs/lich.yaml`](packs/lich.yaml), [`packs/gentleman.yaml`](packs/gentleman.yaml), [`packs/cerbero.yaml`](packs/cerbero.yaml)
+- Identity contract: [`schemas/identity.schema.json`](schemas/identity.schema.json)
+- Offices: `SaepAlcance` … `SaepMejora` + spine `presentador` / `orquestador`
+- MCP tools: `skflow_agents_list`, `skflow_agent_get`, `skflow_packs_list`, `skflow_pack_get`, `skflow_identity_resolve`, brief_*
+- DnDApp Cursor rule: `.cursor/rules/legion.mdc` (alwaysApply)
+- PackLich → SaepArquitectura; PackGentleman → SaepIngenieria (not UX); PackCerbero → centinela_cerbero
+
+## Boot after Cursor restart
+
+MCP `skullrender-agents` already in `DnDApp/.mcp.json` and `~/.cursor/mcp.json`. Rebuild: `bun run bundle` in SkullRender-Agents. Then restart Cursor and call `skflow_agents_list` / `skflow_identity_resolve`.
+
 ## Cross-repo relations
 
 | Repo | Responsibility |
