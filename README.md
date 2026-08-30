@@ -20,7 +20,7 @@ https://github.com/crozzbite/WorkDesktop/tree/governance/vscode-copilot-ready
 ### Prerequisites
 
 - [Node.js 18+](https://nodejs.org) (run `bundle/cli.js`)
-- [Bun](https://bun.sh) (install / test / bundle)
+- [Bun](https://bun.sh) preferred for install / test / bundle. If `bun install` fails, `npm install` — never commit `package-lock.json` next to `bun.lock`
 - For Scope B: clone **office-accelerator** as a **sibling** folder (same parent directory)
 
 ```powershell
@@ -30,6 +30,7 @@ git clone https://github.com/crozzbite/office-accelerator.git
 
 cd SkullRender-Agents
 bun install
+# if Bun fails: npm install  (do not git-add package-lock.json)
 bun test src/
 bun run bundle
 ```
@@ -77,7 +78,7 @@ node bundle/cli.js mcp
 | `skflow_identity_resolve` | Office (± pack) → prompt block |
 | `skflow_brief_validate` | Deterministic brief check |
 | `skflow_brief_schema` | Brief JSON Schema |
-| `skflow_packs_list` / `skflow_pack_get` | Packs (legacy / optional — **not** Scope B SoT) |
+| `skflow_packs_list` / `skflow_pack_get` | Packs when `SKFLOW_ROOT/packs/` has YAML (Legion). **Not advertised** on pack-free Scope B roots |
 
 ---
 
