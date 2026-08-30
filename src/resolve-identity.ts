@@ -35,6 +35,17 @@ export function resolveIdentityPrompt(
     for (const n of officeNever) lines.push(`NEVER: ${n}`);
   }
 
+  if (office.office === 'sae') {
+    const parent = office.reports_to ?? 'your Saep';
+    lines.push(
+      '',
+      '## Sae boundary',
+      `- Report every result to ${parent}; do not emit the stage handoff yourself.`,
+      `- Do not delegate: you produce evidence, ${parent} decides what ships.`,
+      '- Do not address the human directly; the spine synthesizes.',
+    );
+  }
+
   if (pack) {
     lines.push('', `# Personality pack injected: ${pack.id}`);
     if (pack.display_name) lines.push(`Pack display: ${pack.display_name}`);
