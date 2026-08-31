@@ -35,14 +35,15 @@ Planeación viva de la Legion (topología SDLC, RASCI, kickoff paralelo, permiso
 ## Sae delegation contract (enforced, not documented-only)
 
 A `Sae` (Sub Agente Experto) is an expert subagent under exactly one `Saep` stage office.
-`AgentsManager.loadAll()` **throws** when a manifest with `office: sae`:
+`AgentsManager.loadAll()` **throws** when a file cannot be parsed, has no `id`, or a manifest with `office: sae`:
 
 - has no `reports_to`;
 - reports to an id that is not loaded;
-- reports to something that is not `office: saep` (spine shortcut or Sae-to-Sae nesting).
+- reports to something that is not `office: saep` (spine shortcut or Sae-to-Sae nesting);
+- holds the Task tool or sets `handoff_owner: true`.
 
-Malformed YAML is still skipped with a console error, but a broken delegation chain is not:
-listing an agent whose parent does not exist would advertise a contract that cannot be honoured.
+`yamlText` / `skflow_agent_get` resolve through `loadAll`, so a broken sibling is not skipped.
+`skflow_packs_list` / `skflow_pack_get` are advertised only when `packs/` has YAML; CallTool of those names on a pack-free root returns `Unknown tool`.
 
 `officeTree()` exposes the spine / Saep / Sae layering, and `formatList()` renders Saes indented
 under their office so `skflow_agents_list` shows who reports to whom. This deliberately avoids a

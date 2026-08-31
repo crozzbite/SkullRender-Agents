@@ -16,6 +16,8 @@ export interface OfficeTree {
  * A Sae must report to a Saep. Reporting to spine, to another Sae, or to a
  * missing id means the delegation chain lies about who owns the stage handoff,
  * so it is rejected instead of being silently listed.
+ *
+ * A Sae must not hold Task or own a handoff: those belong to the parent Saep.
  */
 function assertSaeParents(map: Map<string, AgentManifest>): void {
   for (const manifest of map.values()) {
@@ -35,6 +37,17 @@ function assertSaeParents(map: Map<string, AgentManifest>): void {
     if (parent.office !== 'saep') {
       throw new Error(
         `AgentsManager: Sae ${manifest.id} reports to ${parentId} (office: ${parent.office ?? 'unset'}); a Sae must report to a Saep.`,
+      );
+    }
+    const tools = manifest.permissions?.tools ?? [];
+    if (tools.includes('Task')) {
+      throw new Error(
+        `AgentsManager: Sae ${manifest.id} must not hold the Task tool; a Sae produces evidence and does not re-delegate.`,
+      );
+    }
+    if (manifest.handoff_owner === true) {
+      throw new Error(
+        `AgentsManager: Sae ${manifest.id} must not set handoff_owner; a Sae never hands off to PMO.`,
       );
     }
   }
@@ -61,23 +74,28 @@ export class AgentsManager {
   }
 
   /**
-   * Load all manifests. Malformed files are skipped with a console error, but a
-   * broken Sae → Saep delegation chain throws: see `assertSaeParents`.
+   * Load all manifests. A file that cannot be parsed, has no `id`, or reuses an
+   * `id` already loaded from another file fails the load. A broken Sae → Saep
+   * delegation chain also throws: see `assertSaeParents`.
    */
   loadAll(): Map<string, AgentManifest> {
     const map = new Map<string, AgentManifest>();
     for (const filePath of this.listIds()) {
+      let data: AgentManifest;
       try {
         const raw = fs.readFileSync(filePath, 'utf8');
-        const data = YAML.parse(raw) as AgentManifest;
-        if (!data?.id || typeof data.id !== 'string') {
-          console.error(`AgentsManager: missing id in ${filePath}`);
-          continue;
-        }
-        map.set(data.id, data);
+        data = YAML.parse(raw) as AgentManifest;
       } catch (e) {
-        console.error(`AgentsManager: failed ${filePath}`, e);
+        const detail = e instanceof Error ? e.message : String(e);
+        throw new Error(`AgentsManager: failed to parse ${filePath}: ${detail}`);
       }
+      if (!data?.id || typeof data.id !== 'string') {
+        throw new Error(`AgentsManager: missing id in ${filePath}`);
+      }
+      if (map.has(data.id)) {
+        throw new Error(`AgentsManager: duplicate id ${data.id} in ${filePath}`);
+      }
+      map.set(data.id, data);
     }
     assertSaeParents(map);
     return map;
@@ -149,15 +167,11 @@ export class AgentsManager {
   }
 
   yamlText(id: string): string | null {
-    const files = this.listIds();
-    for (const fp of files) {
-      try {
-        const raw = fs.readFileSync(fp, 'utf8');
-        const data = YAML.parse(raw) as AgentManifest;
-        if (data?.id === id) return raw;
-      } catch {
-        /* skip */
-      }
+    if (!this.loadAll().has(id)) return null;
+    for (const fp of this.listIds()) {
+      const raw = fs.readFileSync(fp, 'utf8');
+      const data = YAML.parse(raw) as AgentManifest;
+      if (data?.id === id) return raw;
     }
     return null;
   }

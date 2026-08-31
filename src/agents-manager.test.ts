@@ -51,6 +51,37 @@ describe('AgentsManager', () => {
     const mgr = new AgentsManager(ROOT);
     expect(mgr.yamlText('presentador')).not.toBeNull();
   });
+
+  test('yamlText fails loud when a sibling manifest cannot be parsed', () => {
+    const mgr = new AgentsManager(
+      fixtureRoot({
+        OfficePmo: PMO,
+        Broken: 'id: Broken\n  this is not: [valid yaml',
+      }),
+    );
+    expect(() => mgr.yamlText('OfficePmo')).toThrow(/failed to parse/);
+  });
+
+  test('yamlText fails loud when a sibling manifest has no id', () => {
+    const mgr = new AgentsManager(
+      fixtureRoot({
+        OfficePmo: PMO,
+        NoId: 'office: spine\nreports_to: Stakeholder\npersonality_pack_default: false\n',
+      }),
+    );
+    expect(() => mgr.yamlText('OfficePmo')).toThrow(/missing id/);
+  });
+
+  test('loadAll and yamlText fail loud when two files share the same id', () => {
+    const mgr = new AgentsManager(
+      fixtureRoot({
+        OfficePmo: PMO,
+        OfficePmoCopy: PMO,
+      }),
+    );
+    expect(() => mgr.loadAll()).toThrow(/duplicate id OfficePmo/);
+    expect(() => mgr.yamlText('OfficePmo')).toThrow(/duplicate id OfficePmo/);
+  });
 });
 
 describe('AgentsManager office tree', () => {
@@ -103,6 +134,56 @@ describe('AgentsManager office tree', () => {
       }),
     );
     expect(() => mgr.loadAll()).toThrow(/OfficeSaeShortcut/);
+  });
+
+  test('loadAll fails loud when a manifest cannot be parsed', () => {
+    const mgr = new AgentsManager(
+      fixtureRoot({
+        OfficePmo: PMO,
+        Broken: 'id: Broken\n  this is not: [valid yaml',
+      }),
+    );
+    expect(() => mgr.loadAll()).toThrow(/failed to parse/);
+  });
+
+  test('loadAll fails loud when a manifest has no id', () => {
+    const mgr = new AgentsManager(
+      fixtureRoot({
+        OfficePmo: PMO,
+        NoId: 'office: spine\nreports_to: Stakeholder\npersonality_pack_default: false\n',
+      }),
+    );
+    expect(() => mgr.loadAll()).toThrow(/missing id/);
+  });
+
+  test('loadAll rejects a Sae that holds the Task tool', () => {
+    const mgr = new AgentsManager(
+      fixtureRoot({
+        OfficePmo: PMO,
+        OfficeArchitecture: ARCH,
+        OfficeSaeContracts:
+          sae('OfficeSaeContracts', 'OfficeArchitecture') +
+          'permissions:\n  tools:\n    - Read\n    - Task\n',
+      }),
+    );
+    expect(() => mgr.loadAll()).toThrow(/Task/);
+  });
+
+  test('loadAll rejects a Sae with handoff_owner true', () => {
+    const mgr = new AgentsManager(
+      fixtureRoot({
+        OfficePmo: PMO,
+        OfficeArchitecture: ARCH,
+        OfficeSaeContracts: `id: OfficeSaeContracts
+office: sae
+stage: architecture
+reports_to: OfficeArchitecture
+handoff_owner: true
+personality_pack_default: false
+`,
+      }),
+    );
+    expect(() => mgr.loadAll()).toThrow(/handoff_owner/);
   });
 
   test('formatList nests Saes under their Saep', () => {
