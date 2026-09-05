@@ -22,8 +22,8 @@ Brief validation duplicates `schemas/brief.schema.json` in TypeScript (**single 
 
 Planeación viva de la Legion (topología SDLC, RASCI, kickoff paralelo, permisos, packs):
 
-- Cursor canvas: `~/.cursor/projects/c-Users-zzorc-OneDrive-Desktop-WorkDesktop-DnDApp/canvases/legion-rasci-sdlc.canvas.tsx`
 - Status: **v2.3** — office Saep/Sae + personality packs inyectables
+- Planning canvas lives in the **DnDApp** Cursor workspace (local-only; not shipped in this repo — do not clone a `~/.cursor/projects/…` path)
 - 8 etapas: Scope → Arqui → UX → **Ingenieria** → QA → Deploy → Prod → Mejora
 - Packs: [`packs/lich.yaml`](packs/lich.yaml), [`packs/gentleman.yaml`](packs/gentleman.yaml), [`packs/cerbero.yaml`](packs/cerbero.yaml)
 - Identity contract: [`schemas/identity.schema.json`](schemas/identity.schema.json)
@@ -32,9 +32,33 @@ Planeación viva de la Legion (topología SDLC, RASCI, kickoff paralelo, permiso
 - DnDApp Cursor rule: `.cursor/rules/legion.mdc` (alwaysApply)
 - PackLich → SaepArquitectura; PackGentleman → SaepIngenieria (not UX); PackCerbero → centinela_cerbero
 
+## Sae delegation contract (enforced, not documented-only)
+
+A `Sae` (Sub Agente Experto) is an expert subagent under exactly one `Saep` stage office.
+`AgentsManager.loadAll()` **throws** when a file cannot be parsed, has no `id`, or a manifest with `office: sae`:
+
+- has no `reports_to`;
+- reports to an id that is not loaded;
+- reports to something that is not `office: saep` (spine shortcut or Sae-to-Sae nesting);
+- holds the Task tool or sets `handoff_owner: true`.
+
+`yamlText` / `skflow_agent_get` resolve through `loadAll`, so a broken sibling is not skipped.
+`skflow_packs_list` / `skflow_pack_get` are advertised only when `packs/` has YAML; CallTool of those names on a pack-free root returns `Unknown tool`.
+
+`officeTree()` exposes the spine / Saep / Sae layering, and `formatList()` renders Saes indented
+under their office so `skflow_agents_list` shows who reports to whom. This deliberately avoids a
+new `skflow_office_tree` tool — the hierarchy rides the existing tool rather than adding a
+cross-repo contract to keep in sync.
+
+`skflow_identity_resolve` adds a **Sae boundary** block for `office: sae`, stating the parent
+office, that the Sae does not emit the stage handoff, and that it does not delegate further.
+
+Roster generation lives in [`office-accelerator`](../office-accelerator) (`saes:` in a cookbook).
+This repo serves and validates; it does not author the catalog.
+
 ## Boot after Cursor restart
 
-MCP `skullrender-agents` already in `DnDApp/.mcp.json` and `~/.cursor/mcp.json`. Rebuild: `bun run bundle` in SkullRender-Agents. Then restart Cursor and call `skflow_agents_list` / `skflow_identity_resolve`.
+Register MCP `skullrender-agents` in the consuming workspace (e.g. DnDApp `.mcp.json` or Cursor user MCP). Rebuild: `bun run bundle` in SkullRender-Agents (if Bun fails, `npm install` then `npm run bundle`). Then restart the host and call `skflow_agents_list` / `skflow_identity_resolve`.
 
 ## Cross-repo relations
 
@@ -45,4 +69,4 @@ MCP `skullrender-agents` already in `DnDApp/.mcp.json` and `~/.cursor/mcp.json`.
 
 ## Operational notes
 
-- OneDrive-heavy paths historically caused phantom `node_modules` entries — after clone prefer `bun install` locally; if modules look empty, reinstall or copy MCP SDK subtree from sibling as stopgap documented in backlog tasks if recurring.
+- OneDrive-heavy paths historically caused phantom `node_modules` entries — after clone prefer `bun install` locally; if Bun fails, `npm install` (do not commit `package-lock.json` while `bun.lock` is the canonical lockfile). If modules look empty, reinstall.

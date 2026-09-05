@@ -18,6 +18,40 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 import YAML from "yaml";
+function assertSaeParents(map) {
+  for (const manifest of map.values()) {
+    if (manifest.office !== "sae")
+      continue;
+    const parentId = manifest.reports_to;
+    if (!parentId) {
+      throw new Error(
+        `AgentsManager: Sae ${manifest.id} has no reports_to; a Sae must report to a Saep.`
+      );
+    }
+    const parent = map.get(parentId);
+    if (!parent) {
+      throw new Error(
+        `AgentsManager: Sae ${manifest.id} reports to ${parentId}, which is not a loaded manifest.`
+      );
+    }
+    if (parent.office !== "saep") {
+      throw new Error(
+        `AgentsManager: Sae ${manifest.id} reports to ${parentId} (office: ${parent.office ?? "unset"}); a Sae must report to a Saep.`
+      );
+    }
+    const tools = manifest.permissions?.tools ?? [];
+    if (tools.includes("Task")) {
+      throw new Error(
+        `AgentsManager: Sae ${manifest.id} must not hold the Task tool; a Sae produces evidence and does not re-delegate.`
+      );
+    }
+    if (manifest.handoff_owner === true) {
+      throw new Error(
+        `AgentsManager: Sae ${manifest.id} must not set handoff_owner; a Sae never hands off to PMO.`
+      );
+    }
+  }
+}
 var AgentsManager = class {
   repoRoot;
   constructor(repoRoot) {
@@ -32,23 +66,67 @@ var AgentsManager = class {
       return [];
     return fs.readdirSync(dir).filter((f) => f.endsWith(".yaml") || f.endsWith(".yml")).map((f) => path.join(dir, f));
   }
-  /** Load all manifests; malformed files are skipped with console error. */
+  /**
+   * Load all manifests. A file that cannot be parsed, has no `id`, or reuses an
+   * `id` already loaded from another file fails the load. A broken Sae → Saep
+   * delegation chain also throws: see `assertSaeParents`.
+   */
   loadAll() {
     const map = /* @__PURE__ */ new Map();
     for (const filePath of this.listIds()) {
+      let data;
       try {
         const raw = fs.readFileSync(filePath, "utf8");
-        const data = YAML.parse(raw);
-        if (!data?.id || typeof data.id !== "string") {
-          console.error(`AgentsManager: missing id in ${filePath}`);
-          continue;
-        }
-        map.set(data.id, data);
+        data = YAML.parse(raw);
       } catch (e) {
-        console.error(`AgentsManager: failed ${filePath}`, e);
+        const detail = e instanceof Error ? e.message : String(e);
+        throw new Error(`AgentsManager: failed to parse ${filePath}: ${detail}`);
+      }
+      if (!data?.id || typeof data.id !== "string") {
+        throw new Error(`AgentsManager: missing id in ${filePath}`);
+      }
+      if (map.has(data.id)) {
+        throw new Error(`AgentsManager: duplicate id ${data.id} in ${filePath}`);
+      }
+      map.set(data.id, data);
+    }
+    assertSaeParents(map);
+    return map;
+  }
+  /** Spine / Saep / Sae layering, for callers that need who-reports-to-whom. */
+  officeTree() {
+    const all = this.loadAll();
+    const byId = (a, b) => a.localeCompare(b);
+    const spine = [];
+    const other = [];
+    const saesByParent = /* @__PURE__ */ new Map();
+    const saepIds = [];
+    for (const m of all.values()) {
+      switch (m.office) {
+        case "spine":
+          spine.push(m.id);
+          break;
+        case "saep":
+          saepIds.push(m.id);
+          break;
+        case "sae":
+          saesByParent.set(m.reports_to, [
+            ...saesByParent.get(m.reports_to) ?? [],
+            m.id
+          ]);
+          break;
+        default:
+          other.push(m.id);
       }
     }
-    return map;
+    return {
+      spine: spine.sort(byId),
+      saeps: saepIds.sort(byId).map((id) => ({
+        id,
+        saes: (saesByParent.get(id) ?? []).sort(byId)
+      })),
+      other: other.sort(byId)
+    };
   }
   getAgent(id) {
     return this.loadAll().get(id);
@@ -57,27 +135,35 @@ var AgentsManager = class {
     const all = this.loadAll();
     if (all.size === 0)
       return "No manifests found.";
-    const ids = [...all.keys()].sort((a, b) => a.localeCompare(b));
-    const lines = ids.map((id) => {
+    const entry = (id, indent) => {
       const m = all.get(id);
       const dn = m.display_name ?? m.id;
       const sm = typeof m.summary === "string" ? m.summary.trim().split("\n")[0] ?? "" : "";
-      return `- **${m.id}** \u2014 ${dn}
-  ${sm}`;
-    });
+      return `${indent}- **${m.id}** \u2014 ${dn}
+${indent}  ${sm}`;
+    };
+    const tree = this.officeTree();
+    const lines = [];
+    for (const id of tree.spine)
+      lines.push(entry(id, ""));
+    for (const saep of tree.saeps) {
+      lines.push(entry(saep.id, ""));
+      for (const sae of saep.saes)
+        lines.push(entry(sae, "  "));
+    }
+    for (const id of tree.other)
+      lines.push(entry(id, ""));
     return [`# Agents (${all.size})
 `, ...lines].join("\n");
   }
   yamlText(id) {
-    const files = this.listIds();
-    for (const fp of files) {
-      try {
-        const raw = fs.readFileSync(fp, "utf8");
-        const data = YAML.parse(raw);
-        if (data?.id === id)
-          return raw;
-      } catch {
-      }
+    if (!this.loadAll().has(id))
+      return null;
+    for (const fp of this.listIds()) {
+      const raw = fs.readFileSync(fp, "utf8");
+      const data = YAML.parse(raw);
+      if (data?.id === id)
+        return raw;
     }
     return null;
   }
@@ -302,6 +388,93 @@ var PacksManager = class {
   }
 };
 
+// src/mcp-tools.ts
+var AGENT_TOOLS = [
+  {
+    name: "skflow_agents_list",
+    description: "List declarative agent manifests (spine / Saep / Sae / Office* / legacy expertos).",
+    inputSchema: { type: "object", properties: {}, required: [] }
+  },
+  {
+    name: "skflow_agent_get",
+    description: "Get full YAML text of one agent manifest by id. Use skflow_agents_list for available ids.",
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "string", description: "Manifest id field" } },
+      required: ["id"]
+    }
+  }
+];
+var PACK_TOOLS = [
+  {
+    name: "skflow_packs_list",
+    description: "List personality packs in this SKFLOW_ROOT (Legion only: PackLich, PackGentleman, PackCerbero). Absent when the root has no packs/ folder (Scope B).",
+    inputSchema: { type: "object", properties: {}, required: [] }
+  },
+  {
+    name: "skflow_pack_get",
+    description: "Get full YAML of one personality pack by id (e.g. PackLich). Legion SKFLOW_ROOT only.",
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"]
+    }
+  }
+];
+function identityTool(includePackTools) {
+  return {
+    name: "skflow_identity_resolve",
+    description: includePackTools ? "Resolve office identity (+ optional personality pack) into a prompt block. Pack defaults from manifest.personality_pack or pack.inject_default_into. For Scope B use inject_pack: false." : "Resolve office identity into a prompt block. This SKFLOW_ROOT has no packs/; inject_pack is a no-op.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "Office / agent manifest id"
+        },
+        inject_pack: {
+          description: "true = inject default pack; false = office only; string = pack id to force. Ignored when this root has no packs/.",
+          oneOf: [{ type: "boolean" }, { type: "string" }]
+        }
+      },
+      required: ["id"]
+    }
+  };
+}
+var BRIEF_TOOLS = [
+  {
+    name: "skflow_brief_validate",
+    description: "Validate a Presentador\u2192Orquestador brief (JSON object or YAML/JSON string). Deterministic check mirroring schemas/brief.schema.json (no LLM).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        brief: {
+          description: "Either a JSON object with goal/constraints/forbidden_capabilities or stringified YAML/JSON",
+          oneOf: [{ type: "object" }, { type: "string" }]
+        }
+      },
+      required: ["brief"]
+    }
+  },
+  {
+    name: "skflow_brief_schema",
+    description: "Return the JSON Schema used to validate Presentador\u21C4Orquestador briefs (for prompting engineers).",
+    inputSchema: { type: "object", properties: {}, required: [] }
+  }
+];
+function hasPackFiles(packs) {
+  return packs.listFiles().length > 0;
+}
+function listMcpTools(packs) {
+  const includePackTools = hasPackFiles(packs);
+  return [
+    ...AGENT_TOOLS,
+    ...includePackTools ? PACK_TOOLS : [],
+    identityTool(includePackTools),
+    ...BRIEF_TOOLS
+  ];
+}
+
 // src/resolve-identity.ts
 function resolveIdentityPrompt(office, pack) {
   const lines = [];
@@ -343,6 +516,16 @@ function resolveIdentityPrompt(office, pack) {
     for (const n of officeNever)
       lines.push(`NEVER: ${n}`);
   }
+  if (office.office === "sae") {
+    const parent = office.reports_to ?? "your Saep";
+    lines.push(
+      "",
+      "## Sae boundary",
+      `- Report every result to ${parent}; do not emit the stage handoff yourself.`,
+      `- Do not delegate: you produce evidence, ${parent} decides what ships.`,
+      "- Do not address the human directly; the spine synthesizes."
+    );
+  }
   if (pack) {
     lines.push("", `# Personality pack injected: ${pack.id}`);
     if (pack.display_name)
@@ -367,6 +550,115 @@ function resolveIdentityPrompt(office, pack) {
   return lines.join("\n");
 }
 
+// src/handle-call-tool.ts
+async function handleCallTool(name, rawArgs, ctx) {
+  const { agents, packs, briefValidator, repoRoot } = ctx;
+  if ((name === "skflow_packs_list" || name === "skflow_pack_get") && !hasPackFiles(packs)) {
+    return {
+      content: [{ type: "text", text: `Unknown tool: ${name}` }],
+      isError: true
+    };
+  }
+  switch (name) {
+    case "skflow_agents_list":
+      return { content: [{ type: "text", text: agents.formatList() }] };
+    case "skflow_agent_get": {
+      const id = String(rawArgs.id ?? "");
+      const text = agents.yamlText(id);
+      if (!text) {
+        return {
+          content: [{ type: "text", text: `Manifest id="${id}" not found.` }],
+          isError: true
+        };
+      }
+      return { content: [{ type: "text", text }] };
+    }
+    case "skflow_packs_list":
+      return { content: [{ type: "text", text: packs.formatList() }] };
+    case "skflow_pack_get": {
+      const id = String(rawArgs.id ?? "");
+      const text = packs.yamlText(id);
+      if (!text) {
+        return {
+          content: [{ type: "text", text: `Pack id="${id}" not found.` }],
+          isError: true
+        };
+      }
+      return { content: [{ type: "text", text }] };
+    }
+    case "skflow_identity_resolve": {
+      const args = rawArgs;
+      const id = String(args.id ?? "");
+      const office = agents.getAgent(id);
+      if (!office) {
+        return {
+          content: [{ type: "text", text: `Manifest id="${id}" not found.` }],
+          isError: true
+        };
+      }
+      let packId;
+      const inj = args.inject_pack;
+      if (inj === false) {
+        packId = void 0;
+      } else if (typeof inj === "string" && inj.trim()) {
+        packId = inj.trim();
+      } else if (inj === true || inj === void 0) {
+        packId = typeof office.personality_pack === "string" ? office.personality_pack : void 0;
+        if (!packId) {
+          for (const p of packs.loadAll().values()) {
+            if (p.inject_default_into?.includes(id)) {
+              packId = p.id;
+              break;
+            }
+          }
+        }
+        if (inj === void 0 && office.personality_pack_default === false && !office.personality_pack) {
+          packId = void 0;
+        }
+      }
+      const pack = packId ? packs.getPack(packId) : void 0;
+      if (packId && !pack) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Pack id="${packId}" not found for office "${id}".`
+            }
+          ],
+          isError: true
+        };
+      }
+      const prompt = resolveIdentityPrompt(office, pack ?? null);
+      return { content: [{ type: "text", text: prompt }] };
+    }
+    case "skflow_brief_validate": {
+      const brief = rawArgs.brief;
+      if (brief === void 0) {
+        return {
+          content: [{ type: "text", text: "Missing brief argument." }],
+          isError: true
+        };
+      }
+      const result = briefValidator.validatePayload(brief);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+      };
+    }
+    case "skflow_brief_schema": {
+      const fs5 = await import("fs/promises");
+      const path5 = await import("path");
+      const p = path5.join(repoRoot, "schemas", "brief.schema.json");
+      const sch = await fs5.readFile(p, "utf8");
+      return { content: [{ type: "text", text: sch }] };
+    }
+    default:
+      return {
+        content: [{ type: "text", text: `Unknown tool: ${name}` }],
+        isError: true
+      };
+  }
+}
+
 // src/mcp-server.ts
 async function runMcpServer(repoRoot) {
   const agents = new AgentsManager(repoRoot);
@@ -377,174 +669,11 @@ async function runMcpServer(repoRoot) {
     { capabilities: { tools: {} } }
   );
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      {
-        name: "skflow_agents_list",
-        description: "List declarative agent manifests (spine / Saep / Sae / legacy expertos).",
-        inputSchema: { type: "object", properties: {}, required: [] }
-      },
-      {
-        name: "skflow_agent_get",
-        description: "Get full YAML text of one agent manifest by id. Use skflow_agents_list for available ids.",
-        inputSchema: {
-          type: "object",
-          properties: { id: { type: "string", description: "Manifest id field" } },
-          required: ["id"]
-        }
-      },
-      {
-        name: "skflow_packs_list",
-        description: "List Legion personality packs (PackLich, PackGentleman, PackCerbero). Injected on-demand into offices.",
-        inputSchema: { type: "object", properties: {}, required: [] }
-      },
-      {
-        name: "skflow_pack_get",
-        description: "Get full YAML of one personality pack by id (e.g. PackLich).",
-        inputSchema: {
-          type: "object",
-          properties: { id: { type: "string" } },
-          required: ["id"]
-        }
-      },
-      {
-        name: "skflow_identity_resolve",
-        description: "Resolve office identity (+ optional personality pack) into a prompt block for Cursor subagents. Pack defaults from manifest.personality_pack or pack.inject_default_into.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            id: {
-              type: "string",
-              description: "Office / agent manifest id (e.g. SaepAlcance, SaepArquitectura)"
-            },
-            inject_pack: {
-              description: "true = inject default pack; false = office only; string = pack id to force",
-              oneOf: [{ type: "boolean" }, { type: "string" }]
-            }
-          },
-          required: ["id"]
-        }
-      },
-      {
-        name: "skflow_brief_validate",
-        description: "Validate a Presentador\u2192Orquestador brief (JSON object or YAML/JSON string). Deterministic check mirroring schemas/brief.schema.json (no LLM).",
-        inputSchema: {
-          type: "object",
-          properties: {
-            brief: {
-              description: "Either a JSON object with goal/constraints/forbidden_capabilities or stringified YAML/JSON",
-              oneOf: [{ type: "object" }, { type: "string" }]
-            }
-          },
-          required: ["brief"]
-        }
-      },
-      {
-        name: "skflow_brief_schema",
-        description: "Return the JSON Schema used to validate Presentador\u21C4Orquestador briefs (for prompting engineers).",
-        inputSchema: { type: "object", properties: {}, required: [] }
-      }
-    ]
+    tools: listMcpTools(packs)
   }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: rawArgs } = request.params;
-    switch (name) {
-      case "skflow_agents_list":
-        return { content: [{ type: "text", text: agents.formatList() }] };
-      case "skflow_agent_get": {
-        const id = String(rawArgs.id ?? "");
-        const text = agents.yamlText(id);
-        if (!text) {
-          return {
-            content: [{ type: "text", text: `Manifest id="${id}" not found.` }],
-            isError: true
-          };
-        }
-        return { content: [{ type: "text", text }] };
-      }
-      case "skflow_packs_list":
-        return { content: [{ type: "text", text: packs.formatList() }] };
-      case "skflow_pack_get": {
-        const id = String(rawArgs.id ?? "");
-        const text = packs.yamlText(id);
-        if (!text) {
-          return {
-            content: [{ type: "text", text: `Pack id="${id}" not found.` }],
-            isError: true
-          };
-        }
-        return { content: [{ type: "text", text }] };
-      }
-      case "skflow_identity_resolve": {
-        const args = rawArgs;
-        const id = String(args.id ?? "");
-        const office = agents.getAgent(id);
-        if (!office) {
-          return {
-            content: [{ type: "text", text: `Manifest id="${id}" not found.` }],
-            isError: true
-          };
-        }
-        let packId;
-        const inj = args.inject_pack;
-        if (inj === false) {
-          packId = void 0;
-        } else if (typeof inj === "string" && inj.trim()) {
-          packId = inj.trim();
-        } else if (inj === true || inj === void 0) {
-          packId = typeof office.personality_pack === "string" ? office.personality_pack : void 0;
-          if (!packId) {
-            for (const p of packs.loadAll().values()) {
-              if (p.inject_default_into?.includes(id)) {
-                packId = p.id;
-                break;
-              }
-            }
-          }
-          if (inj === void 0 && office.personality_pack_default === false && !office.personality_pack) {
-            packId = void 0;
-          }
-        }
-        const pack = packId ? packs.getPack(packId) : void 0;
-        if (packId && !pack) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Pack id="${packId}" not found for office "${id}".`
-              }
-            ],
-            isError: true
-          };
-        }
-        const prompt = resolveIdentityPrompt(office, pack ?? null);
-        return { content: [{ type: "text", text: prompt }] };
-      }
-      case "skflow_brief_validate": {
-        const brief = rawArgs.brief;
-        if (brief === void 0) {
-          return {
-            content: [{ type: "text", text: "Missing brief argument." }],
-            isError: true
-          };
-        }
-        const result = briefValidator.validatePayload(brief);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
-        };
-      }
-      case "skflow_brief_schema": {
-        const fs5 = await import("fs/promises");
-        const path5 = await import("path");
-        const p = path5.join(repoRoot, "schemas", "brief.schema.json");
-        const sch = await fs5.readFile(p, "utf8");
-        return { content: [{ type: "text", text: sch }] };
-      }
-      default:
-        return {
-          content: [{ type: "text", text: `Unknown tool: ${name}` }],
-          isError: true
-        };
-    }
+    return handleCallTool(name, rawArgs, { agents, packs, briefValidator, repoRoot });
   });
   console.error("Starting @skullrender/mcp-agents \u2026");
   console.error(`Repo root: ${repoRoot}`);

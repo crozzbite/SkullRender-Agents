@@ -7,6 +7,9 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+# Bun lockfile is canonical; never commit npm's lock alongside it
+package-lock.json
+npm-shrinkwrap.json
 
 # Local agent / skill caches
 .atl/
